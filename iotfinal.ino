@@ -41,8 +41,8 @@ String currentLogFile = "";
 const int valX = 35;
 
 /* ----------------- CONFIG FIREBASE (METODE DATABASE SECRET) ----------------- */
-#define FIREBASE_DATABASE_URL "https://luxtracer-default-rtdb.asia-southeast1.firebasedatabase.app/"
-#define FIREBASE_DATABASE_SECRET "CiuF0bwy1I5yJBrZvGCuWxeftHprQo3Dzrk7d4wu"
+#define FIREBASE_DATABASE_URL "SECRET"
+#define FIREBASE_DATABASE_SECRET "SECRET"
 #define FIREBASE_DATA_PATH "/data_realtime"
 
 // ================== TIMER NON-BLOCKING ==================
