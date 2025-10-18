@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Sensor & GPS v3.8 (Data Mapping)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body, html {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      font-family: 'Inter', sans-serif; overflow: hidden;
+      transition: background-color 0.5s ease;
+    }
+    #map { height: 100vh; width: 100%; z-index: 10; }
+    .data-card {
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 1rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      padding: 1rem; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; text-align: center;
+      position: relative; transition: transform 0.3s ease, background 0.5s;
+      border: 1px solid rgba(200, 200, 200, 0.2);
+      cursor: pointer;
+    }
+    .data-card:hover { transform: translateY(-5px); }
+    .card-title { font-size: 0.875rem; font-weight: 600; color: #4a5568; margin-top: 0.5rem; }
+    .card-value { font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem; }
+    .unit { font-size: 0.875rem; color: #718096; margin-left: 4px; }
+    .status-indicator { position: absolute; top: 0.75rem; right: 0.75rem; width: 10px; height: 10px; border-radius: 50%; transition: background-color 0.5s ease; }
+    .sparkline { width: 100%; height: 40px; margin-top: 0.5rem;}
+    
+    body.dark { background-color:#1a202c; color:#e2e8f0; }
+    body.dark .main-panel { background: rgba(26, 32, 44, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); }
+    body.dark .data-card { background: rgba(45, 55, 72, 0.85); color:#edf2f7; border-color: rgba(255, 255, 255, 0.1); }
+    body.dark .card-title { color:#a0aec0; }
+    body.dark .unit { color:#a0aec0; }
+    body.dark .gps-info { background-color: #2d3748; color: #a0aec0; }
+    body.dark .text-black { color: #fff; }
+
+    #detail-modal.hidden { display: none; }
+    #close-modal-btn {
+      font-size: 2rem; line-height: 1; border: none;
+      background: transparent; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="main-panel absolute top-4 left-4 right-4 md:w-[26rem] md:right-auto z-20 bg-white/80 backdrop-blur-md rounded-3xl p-4 sm:p-6 shadow-2xl dark:bg-gray-900/80">
+    <div class="text-center mb-2">
+      <h2 class="text-md sm:text-lg font-bold text-black">Monitoring Intensitas Cahaya Lampu Jalan</h2>
+    </div>
+    <div class="flex justify-between items-center text-sm text-black mb-4">
+        <p>Kota Tanjungpinang</p>
+        <p class="font-semibold" id="clock">--:--:--</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div class="data-card" id="card-suhu">
+        <div class="status-indicator bg-gray-400"></div>
+        <div class="p-2 bg-red-100 dark:bg-red-900/50 rounded-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </div>
+        <p class="card-title">Suhu</p>
+        <p class="card-value"><span id="suhu">--</span><span class="unit">°C</span></p>
+        <canvas id="spark-suhu" class="sparkline"></canvas>
+      </div>
+
+      <div class="data-card" id="card-kelembapan">
+        <div class="status-indicator bg-gray-400"></div>
+        <div class="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19v2m-3-3v2m6-2v2" />
+          </svg>
+        </div>
+        <p class="card-title">Kelembapan</p>
+        <p class="card-value"><span id="kelembapan">--</span><span class="unit">%</span></p>
+        <canvas id="spark-kelembapan" class="sparkline"></canvas>
+      </div>
+      
+      <div class="data-card" id="card-kecepatan">
+          <div class="status-indicator bg-gray-400"></div>
+          <div class="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15.2 22.2c-1.3.5-2.7.5-4 0"/>
+                <path d="m11.5 14-2 3.5"/>
+                <path d="m12.5 14 2 3.5"/>
+                <path d="M12 18v-5"/>
+                <path d="M10 13l-2-2.5"/>
+                <path d="M14 13l2-2.5"/>
+                <path d="M7 11.5h10"/>
+                <circle cx="12" cy="4.5" r="2.5"/>
+            </svg>
+          </div>
+          <p class="card-title">Kecepatan</p>
+          <p class="card-value"><span id="kecepatan">--</span><span class="unit">km/j</span></p>
+          <canvas id="spark-kecepatan" class="sparkline"></canvas>
+      </div>
+      
+      <div class="data-card" id="card-satelit">
+          <div class="status-indicator bg-gray-400"></div>
+          <div class="p-2 bg-green-100 dark:bg-green-900/50 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m7.2 12.8 2.8-2.8"/>
+                <path d="M14 10.6 10.6 14"/>
+                <path d="m15.8 7.2 2.8 2.8"/>
+                <path d="M17.2 15.8 14 12.4"/>
+                <path d="m5 3 2 2"/>
+                <path d="M3 5l2 2"/>
+                <path d="m19 3 2 2"/>
+                <path d="M21 5l-2 2"/>
+                <path d="M12 18a6 6 0 0 0 6-6"/>
+                <path d="M12 6A6 6 0 0 0 6 12"/>
+            </svg>
+          </div>
+          <p class="card-title">Satelit</p>
+          <p class="card-value"><span id="satelit">--</span><span class="unit">terlihat</span></p>
+          <canvas id="spark-satelit" class="sparkline"></canvas>
+      </div>
+
+      <div class="data-card col-span-2" id="card-cahaya">
+        <div class="status-indicator bg-gray-400"></div>
+        <div class="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3a1 1 0 011 1v1.667l.333.167a2 2 0 011.5 1.789V15a2 2 0 01-2 2H9.5a2 2 0 01-2-2V7.623a2 2 0 011.5-1.789L9.333 5.667V4a1 1 0 011-1z" />
+            </svg>
+        </div>
+        <p class="card-title">Intensitas Cahaya</p>
+        <p class="card-value"><span id="cahaya">--</span><span class="unit">lux</span></p>
+        <canvas id="spark-cahaya" class="sparkline"></canvas>
+      </div>
+    </div>
+
+    <div class="gps-info mt-4 p-3 bg-gray-100 rounded-lg text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+      <p class="text-center font-bold text-xs mb-1">Koordinat (DMS)</p>
+      <p class="text-center font-semibold text-sm">
+        <span id="coordinates-dms">--°--'--.--"U --°--'--.--"T</span>
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    // --- Impor Pustaka ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+    import "https://unpkg.com/leaflet/dist/leaflet.js";
+
+    // --- Konfigurasi disesuaikan dengan database ESP32 ---
+    const firebaseConfig = {
+      databaseURL: "https://luxtracer-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    };
+    
+    // --- Inisialisasi Aplikasi ---
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // --- Inisialisasi Peta ---
+    const map = L.map('map', { zoomControl: false }).setView([0.9167, 104.45], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker = null, lastLatLng = null, trail;
+    let historyCoords = [];
+    trail = L.polyline(historyCoords, { color: 'blue' }).addTo(map);
+
+    // --- Pengelolaan Data & Grafik ---
+    const dataHistory = {
+      suhu: [], cahaya: [], kelembapan: [], kecepatan: [], satelit: [], labels: []
+    };
+    const MAX_HISTORY = 60; 
+    let detailChart = null; 
+
+    function updateHistory(data) {
+      const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      dataHistory.labels.push(now);
+
+      const dataMap = {
+        suhu: data.suhu,
+        cahaya: data.cahaya,
+        kelembapan: data.kelembapan,
+        kecepatan: data.kecepatan,
+        satelit: data.jumlah_satelit
+      };
+
+      for (const key in dataMap) {
+        dataHistory[key].push(Number(dataMap[key] ?? 0));
+        if (dataHistory[key].length > MAX_HISTORY) {
+            dataHistory[key].shift();
+        }
+      }
+      if (dataHistory.labels.length > MAX_HISTORY) dataHistory.labels.shift();
+    }
+
+    // --- Listener Firebase ---
+    // PERUBAHAN: Membaca dari path "/data_realtime"
+    const dataRef = ref(db, "data_realtime");
+    onValue(dataRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const rawData = snapshot.val();
+        
+        // PERUBAHAN: Memetakan data dari ESP32 ke format yang diharapkan UI
+        const formattedData = {
+            suhu: rawData.Temperature_C,
+            kelembapan: rawData.Humidity_pct,
+            cahaya: rawData.Lux,
+            kecepatan: rawData.Speed_kmph,
+            jumlah_satelit: rawData.Satellites,
+            latitude: rawData.Latitude,
+            longitude: rawData.Longitude
+        };
+
+        updateHistory(formattedData);
+        updateUI(formattedData);
+        updateMap(Number(formattedData.latitude ?? 0), Number(formattedData.longitude ?? 0));
+      }
+    }, (error) => {
+        console.error("Gagal membaca data dari Firebase:", error);
+    });
+
+    function toDMS(deg, isLat) {
+        if (typeof deg !== 'number' || isNaN(deg)) {
+            return `--°--'--.--"`;
+        }
+        const absolute = Math.abs(deg);
+        const degrees = Math.floor(absolute);
+        const minutesNotTruncated = (absolute - degrees) * 60;
+        const minutes = Math.floor(minutesNotTruncated);
+        const seconds = ((minutesNotTruncated - minutes) * 60).toFixed(1);
+        
+        let direction = "";
+        if (isLat) {
+            direction = deg >= 0 ? "U" : "S"; // Utara / Selatan
+        } else {
+            direction = deg >= 0 ? "T" : "B"; // Timur / Barat
+        }
+        return `${degrees}°${minutes}'${seconds}"${direction}`;
+    }
+
+    // --- Fungsi Pembaruan Tampilan ---
+    function drawSparkline(canvasId, historyData, color) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (historyData.length < 2) return;
+      
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      const step = canvas.width / (historyData.length - 1);
+      const maxVal = Math.max(...historyData);
+      const minVal = Math.min(...historyData);
+      const range = maxVal - minVal;
+
+      historyData.forEach((val, i) => {
+          const x = i * step;
+          const y = range === 0 ? canvas.height / 2 : canvas.height - ((val - minVal) / range) * canvas.height;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    function updateUI(d) {
+        document.getElementById("suhu").textContent = Number(d.suhu ?? 0).toFixed(1);
+        document.getElementById("kelembapan").textContent = Number(d.kelembapan ?? 0).toFixed(1);
+        document.getElementById("cahaya").textContent = Number(d.cahaya ?? 0).toFixed(0);
+        document.getElementById("kecepatan").textContent = Number(d.kecepatan ?? 0).toFixed(1);
+        document.getElementById("satelit").textContent = d.jumlah_satelit ?? 0;
+
+        const latDMS = toDMS(d.latitude, true);
+        const lonDMS = toDMS(d.longitude, false);
+        document.getElementById("coordinates-dms").textContent = `${latDMS} ${lonDMS}`;
+        
+        updateStatusIndicator('card-suhu', d.suhu, [35, 30, 24], ['bg-red-500', 'bg-orange-500', 'bg-green-500', 'bg-blue-500']);
+        updateStatusIndicator('card-kelembapan', d.kelembapan, [80, 40], ['bg-blue-500', 'bg-green-500', 'bg-orange-500']);
+        updateStatusIndicator('card-kecepatan', d.kecepatan > 0, [true], ['bg-green-500', 'bg-gray-500']);
+        updateStatusIndicator('card-satelit', d.jumlah_satelit, [5], ['bg-green-500', 'bg-yellow-500']);
+        updateStatusIndicator('card-cahaya', d.cahaya, [1000, 200], ['bg-yellow-500', 'bg-green-500', 'bg-gray-500']);
+
+        const sparkHistoryLimit = 20;
+        drawSparkline("spark-suhu", dataHistory.suhu.slice(-sparkHistoryLimit), "#ef4444");
+        drawSparkline("spark-cahaya", dataHistory.cahaya.slice(-sparkHistoryLimit), "#f59e0b");
+        drawSparkline("spark-kelembapan", dataHistory.kelembapan.slice(-sparkHistoryLimit), "#3b82f6");
+        drawSparkline("spark-kecepatan", dataHistory.kecepatan.slice(-sparkHistoryLimit), "#8b5cf6");
+        drawSparkline("spark-satelit", dataHistory.satelit.slice(-sparkHistoryLimit), "#22c55e");
+    }
+
+    function updateMap(lat, lng) {
+        const newLatLng = [lat, lng];
+        if (!marker) {
+            marker = L.marker(newLatLng).addTo(map).bindPopup("Lokasi Terkini").openPopup();
+        } else {
+            marker.setLatLng(newLatLng);
+        }
+        if (!lastLatLng || map.distance(newLatLng, lastLatLng) > 10) {
+            map.setView(newLatLng, 16);
+            lastLatLng = L.latLng(newLatLng);
+        }
+        historyCoords.push(newLatLng);
+        if (historyCoords.length > 100) historyCoords.shift();
+        trail.setLatLngs(historyCoords);
+    }
+
+    function updateStatusIndicator(cardId, value, thresholds, colors) {
+        const indicator = document.getElementById(cardId)?.querySelector('.status-indicator');
+        if (!indicator) return;
+        let colorClass = colors[colors.length - 1];
+        for (let i = 0; i < thresholds.length; i++) {
+            if (value >= thresholds[i]) {
+                colorClass = colors[i];
+                break;
+            }
+        }
+        indicator.className = `status-indicator ${colorClass}`;
+    }
+
+    // --- Logika Modal Interaktif ---
+    const modal = document.getElementById('detail-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const dataCards = document.querySelectorAll('.data-card');
+
+    function showDetailModal(sensorKey, title, color) {
+      modalTitle.textContent = `Grafik Detail - ${title}`;
+      const ctx = document.getElementById('detail-chart').getContext('2d');
+      if (detailChart) detailChart.destroy();
+
+      const isDark = document.body.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)';
+      const textColor = isDark ? '#e5e7eb' : '#374151';
+
+      detailChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dataHistory.labels,
+          datasets: [{
+            label: title,
+            data: dataHistory[sensorKey],
+            borderColor: color,
+            backgroundColor: color.replace(')', ', 0.2)').replace('rgb', 'rgba'),
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: textColor }, grid: { color: gridColor } },
+            y: { ticks: { color: textColor }, grid: { color: gridColor } }
+          },
+          plugins: { legend: { labels: { color: textColor } } }
+        }
+      });
+      modal.classList.remove('hidden');
+    }
+
+    function hideModal() { modal.classList.add('hidden'); }
+
+    dataCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const sensorId = card.id.split('-')[1];
+        const title = card.querySelector('.card-title').textContent;
+        const svg = card.querySelector('svg');
+        const color = getComputedStyle(svg).color;
+        showDetailModal(sensorId, title, color);
+      });
+    });
+
+    closeModalBtn.addEventListener('click', hideModal);
+    modal.addEventListener('click', (event) => { if (event.target === modal) hideModal(); });
+
+    // --- Fungsi Utilitas (Jam & Tema) ---
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById("clock").textContent = `${hours}:${minutes}:${seconds}`;
+    }
+    
+    function checkTheme() {
+      const isDark = new Date().getHours() >= 18 || new Date().getHours() < 6;
+      document.body.classList.toggle("dark", isDark);
+      if (!modal.classList.contains('hidden') && detailChart) {
+          const gridColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)';
+          const textColor = isDark ? '#e5e7eb' : '#374151';
+          detailChart.options.scales.x.ticks.color = textColor;
+          detailChart.options.scales.y.ticks.color = textColor;
+          detailChart.options.scales.x.grid.color = gridColor;
+          detailChart.options.scales.y.grid.color = gridColor;
+          detailChart.options.plugins.legend.labels.color = textColor;
+          detailChart.update();
+      }
+    }
+    updateClock(); checkTheme();
+    setInterval(updateClock, 1000);
+    setInterval(checkTheme, 60000);
+  </script>
+
+  <div id="detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-2xl transform transition-all">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="modal-title" class="text-xl font-bold text-gray-900 dark:text-white">Detail Grafik</h3>
+        <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 dark:hover:text-white">&times;</button>
+      </div>
+      <div class="h-64">
+        <canvas id="detail-chart"></canvas>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
